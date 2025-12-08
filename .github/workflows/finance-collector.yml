@@ -2,7 +2,7 @@ name: Finance Data Collector
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # todo dia às 18h UTC
+    - cron: '0 21 * * *'  # todo dia às 18h UTC
   workflow_dispatch:
 
 jobs:
