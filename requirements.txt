@@ -1,0 +1,8 @@
+psycopg2-binary
+requests
+yfinance
+beautifulsoup4
+pandas
+sqlalchemy
+lxml
+python-dotenv
