@@ -1,0 +1,30 @@
+name: Finance Data Collector
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # todo dia às 18h UTC
+  workflow_dispatch:
+
+jobs:
+  run-collector:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Rodar coletor
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAPI_TOKEN: ${{ secrets.BRAPI_TOKEN }}
+        run: |
+          python main.py
