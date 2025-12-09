@@ -10,7 +10,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 TICKERS_TABLE = "tickers_acoes"
-SLEEP_BETWEEN = 0.3  # pausa entre chamadas
+SLEEP_BETWEEN = 0.3
 
 class AcoesProcessor:
     def __init__(self, engine):
@@ -20,14 +20,30 @@ class AcoesProcessor:
         ticker_yf = ticker if ticker.upper().endswith(".SA") else ticker + ".SA"
         t = yf.Ticker(ticker_yf)
 
+        # Preço histórico do dia
         hist = t.history(period="1d")
         if hist.empty:
             return None
 
         row = hist.iloc[-1]
-        info = t.info or {}
 
-        data = {
+        # Infos (podem falhar)
+        try:
+            info = t.info or {}
+        except:
+            info = {}
+
+        # lastDividendDate pode vir como timestamp gigante
+        div_date_raw = info.get("lastDividendDate")
+        if isinstance(div_date_raw, (int, float)):
+            try:
+                dividend_date = datetime.fromtimestamp(div_date_raw).date()
+            except:
+                dividend_date = None
+        else:
+            dividend_date = None
+
+        return {
             "ticker": ticker.upper(),
             "data": row.name.date(),
             "preco_abertura": row.get("Open"),
@@ -40,11 +56,11 @@ class AcoesProcessor:
             "beta": info.get("beta"),
             "dividend_yield": info.get("dividendYield"),
             "last_dividend": info.get("lastDividendValue"),
-            "dividend_date": datetime.fromtimestamp(info.get("lastDividendDate")).date() if info.get("lastDividendDate") else None
+            "dividend_date": dividend_date,
         }
-        return data
 
     def run(self):
+        # Criação da tabela — 1 única transação
         with self.engine.begin() as conn:
             conn.exec_driver_sql("""
             CREATE TABLE IF NOT EXISTS historico_acoes (
@@ -66,9 +82,10 @@ class AcoesProcessor:
             )
             """)
 
-            tickers = [r[0] for r in conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}")).fetchall()]
+            tickers = [r[0] for r in conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}"))]
 
-            insert_sql = text("""
+        # INSERT preparado (fora da transação principal)
+        insert_sql = text("""
             INSERT INTO historico_acoes (
                 ticker, data, preco_abertura, preco_fechamento, preco_maximo, preco_minimo,
                 volume, pl, pvp, beta, dividend_yield, last_dividend, dividend_date
@@ -89,33 +106,25 @@ class AcoesProcessor:
                 dividend_yield = EXCLUDED.dividend_yield,
                 last_dividend = EXCLUDED.last_dividend,
                 dividend_date = EXCLUDED.dividend_date
-            """)
+        """)
 
-            for i, ticker in enumerate(tickers, start=1):
-                if not ticker:
-                    print(f"⚠️ Ticker vazio na posição {i}, pulando...")
+        # Processamento ticker a ticker
+        for i, ticker in enumerate(tickers, start=1):
+            print(f"[{i}/{len(tickers)}] Processando {ticker}...")
+
+            try:
+                data = self.fetch_data(ticker)
+                if not data:
+                    print(f"⚠️ Nenhum dado para {ticker}")
                     continue
 
-                print(f"[{i}/{len(tickers)}] Processando {ticker}...")
-                try:
-                    data = self.fetch_data(ticker)
-                    if not data:
-                        print(f"⚠️ Nenhum dado para {ticker}")
-                        continue
+                with self.engine.begin() as conn:
+                    conn.execute(insert_sql, data)
 
-                    # Garantir campos existentes mesmo que None
-                    safe_data = {k: data.get(k) for k in [
-                        "ticker", "data", "preco_abertura", "preco_fechamento", "preco_maximo", "preco_minimo",
-                        "volume", "pl", "pvp", "beta", "dividend_yield", "last_dividend", "dividend_date"
-                    ]}
+                print(f"✅ {ticker} atualizado com sucesso.")
+            except Exception as e:
+                print(f"❌ Erro {ticker}: {e}")
 
-                    with self.engine.begin() as conn:
-                        conn.execute(insert_sql, safe_data)
-
-                    print(f"✅ {ticker} atualizado com sucesso.")
-                except Exception as e:
-                    print(f"❌ Erro {ticker}: {e}")
-
-                time.sleep(SLEEP_BETWEEN)
+            time.sleep(SLEEP_BETWEEN)
 
         print("=== Processamento de ações finalizado ===")

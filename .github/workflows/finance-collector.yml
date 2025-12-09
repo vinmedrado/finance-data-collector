@@ -2,11 +2,13 @@ name: Finance Data Collector
 
 on:
   schedule:
-    - cron: '0 21 * * *'  # todo dia às 18h UTC
+    - cron: '0 21 * * *'     # 18h no Brasil (21h UTC) → roda todos os scripts
+    - cron: '*/20 * * * *'   # a cada 20 minutos → roda só cripto
   workflow_dispatch:
 
 jobs:
-  run-collector:
+  run-daily-collectors:
+    if: github.event.schedule == '0 21 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checar código
@@ -19,12 +21,34 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Rodar coletor
+      - name: Rodar scripts diários
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BRAPI_TOKEN: ${{ secrets.BRAPI_TOKEN }}
         run: |
-          python main.py
+          python main.py          # dentro do main você chama Ações, ETFs, BDRs, FIIs
+
+
+  run-crypto:
+    if: github.event.schedule == '*/20 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+
+      - name: Rodar script de criptos
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python maincripto.py

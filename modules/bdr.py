@@ -77,12 +77,12 @@ class BDRProcessor:
         except Exception:
             return {}
 
-    def merge_data(self, brapi_data, yahoo_data):
-        return {**(brapi_data or {}), **(yahoo_data or {})}
+    def merge_data(self, brapi, yahoo):
+        return {**(brapi or {}), **(yahoo or {})}
 
     def run(self):
         fields = [
-            "ticker", "preco_atual", "preco_52_semana_alta", "preco_52_semana_baixa",
+            "ticker", "data_registro", "preco_atual", "preco_52_semana_alta", "preco_52_semana_baixa",
             "preco_media_50d", "preco_media_200d", "p_l", "p_vp", "p_s", "market_cap",
             "enterprise_value", "roe", "roa", "margem_lucro", "margem_operacional",
             "dividend_yield", "payout_ratio", "crescimento_receita", "crescimento_lucro",
@@ -95,6 +95,7 @@ class BDRProcessor:
             CREATE TABLE IF NOT EXISTS historico_bdr (
                 id SERIAL PRIMARY KEY,
                 ticker TEXT NOT NULL,
+                data_registro DATE,
                 preco_atual NUMERIC,
                 preco_52_semana_alta NUMERIC,
                 preco_52_semana_baixa NUMERIC,
@@ -116,8 +117,7 @@ class BDRProcessor:
                 beta NUMERIC,
                 setor TEXT,
                 industria TEXT,
-                nome_empresa TEXT,
-                UNIQUE(ticker)
+                nome_empresa TEXT
             )
             """)
 
@@ -127,41 +127,18 @@ class BDRProcessor:
 
         insert_sql = text("""
         INSERT INTO historico_bdr (
-            ticker, preco_atual, preco_52_semana_alta, preco_52_semana_baixa,
+            ticker, data_registro, preco_atual, preco_52_semana_alta, preco_52_semana_baixa,
             preco_media_50d, preco_media_200d, p_l, p_vp, p_s, market_cap,
             enterprise_value, roe, roa, margem_lucro, margem_operacional,
             dividend_yield, payout_ratio, crescimento_receita, crescimento_lucro,
             beta, setor, industria, nome_empresa
         ) VALUES (
-            :ticker, :preco_atual, :preco_52_semana_alta, :preco_52_semana_baixa,
+            :ticker, :data_registro, :preco_atual, :preco_52_semana_alta, :preco_52_semana_baixa,
             :preco_media_50d, :preco_media_200d, :p_l, :p_vp, :p_s, :market_cap,
             :enterprise_value, :roe, :roa, :margem_lucro, :margem_operacional,
             :dividend_yield, :payout_ratio, :crescimento_receita, :crescimento_lucro,
             :beta, :setor, :industria, :nome_empresa
         )
-        ON CONFLICT (ticker) DO UPDATE SET
-            preco_atual = EXCLUDED.preco_atual,
-            preco_52_semana_alta = EXCLUDED.preco_52_semana_alta,
-            preco_52_semana_baixa = EXCLUDED.preco_52_semana_baixa,
-            preco_media_50d = EXCLUDED.preco_media_50d,
-            preco_media_200d = EXCLUDED.preco_media_200d,
-            p_l = EXCLUDED.p_l,
-            p_vp = EXCLUDED.p_vp,
-            p_s = EXCLUDED.p_s,
-            market_cap = EXCLUDED.market_cap,
-            enterprise_value = EXCLUDED.enterprise_value,
-            roe = EXCLUDED.roe,
-            roa = EXCLUDED.roa,
-            margem_lucro = EXCLUDED.margem_lucro,
-            margem_operacional = EXCLUDED.margem_operacional,
-            dividend_yield = EXCLUDED.dividend_yield,
-            payout_ratio = EXCLUDED.payout_ratio,
-            crescimento_receita = EXCLUDED.crescimento_receita,
-            crescimento_lucro = EXCLUDED.crescimento_lucro,
-            beta = EXCLUDED.beta,
-            setor = EXCLUDED.setor,
-            industria = EXCLUDED.industria,
-            nome_empresa = EXCLUDED.nome_empresa
         """)
 
         # Loop de processamento
@@ -171,20 +148,20 @@ class BDRProcessor:
                 continue
 
             print(f"[{i}/{len(tickers)}] Processando {ticker}...")
+
             try:
-                brapi_data = self.fetch_brapi(ticker)
-                yahoo_data = self.fetch_yahoo(ticker)
+                brapi = self.fetch_brapi(ticker)
+                yahoo = self.fetch_yahoo(ticker)
+                merged = self.merge_data(brapi, yahoo)
 
-                merged = self.merge_data(brapi_data, yahoo_data)
-
-                # Garantir que todos os campos existam para o SQL
                 safe_data = {field: merged.get(field) for field in fields}
-                safe_data["ticker"] = ticker  # garantir ticker preenchido
+                safe_data["ticker"] = ticker
+                safe_data["data_registro"] = datetime.now().date()
 
                 with self.engine.begin() as conn:
                     conn.execute(insert_sql, safe_data)
 
-                print(f"✅ {ticker} atualizado com sucesso.")
+                print(f"✅ {ticker} registrado.")
             except Exception as e:
                 print(f"❌ Erro {ticker}: {e}")
 

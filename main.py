@@ -26,8 +26,6 @@ from modules.fiis import FIIProcessor
 from modules.etf import ETFProcessor
 from modules.acoes import AcoesProcessor
 from modules.bdr import BDRProcessor
-from modules.cripto import CriptoProcessor
-import psycopg2
 
 print("\n==============================")
 print("  📊 COLETOR FINANCEIRO INICIADO")
@@ -59,18 +57,6 @@ try:
     bdr_proc.run()
 except Exception as e:
     print(f"❌ ERRO durante o processamento de BDR: {e}")
-
-# ----------------------------
-# Criptos
-# ----------------------------
-try:
-    # Cripto usa psycopg2 direto
-    conn = psycopg2.connect(DATABASE_URL)
-    cripto_proc = CriptoProcessor(conn)
-    cripto_proc.run()
-    conn.close()
-except Exception as e:
-    print(f"❌ ERRO durante o processamento de Criptos: {e}")
 
 # ----------------------------
 # ETFs
