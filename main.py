@@ -37,7 +37,7 @@ print("==============================\n")
 # FIIs
 # ----------------------------
 try:
-    fii_proc = FIIProcessor()
+    fii_proc = FIIProcessor(engine)
     fii_proc.run()
 except Exception as e:
     print(f"❌ ERRO durante o processamento de FIIs: {e}")
