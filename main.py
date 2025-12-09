@@ -1,10 +1,24 @@
 from dotenv import load_dotenv
 import os
+import psycopg2
 from sqlalchemy import create_engine
 
 # Carrega .env
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+try:
+    # Teste com psycopg2
+    conn_test = psycopg2.connect(DATABASE_URL)
+    cur = conn_test.cursor()
+    cur.execute("SELECT NOW();")
+    print(f"✅ Conectado ao Neon! Hora do servidor: {cur.fetchone()[0]}")
+    cur.close()
+    conn_test.close()
+except Exception as e:
+    print(f"❌ Erro ao conectar no Neon: {e}")
+
+# Cria engine para módulos que usam SQLAlchemy
 engine = create_engine(DATABASE_URL)
 
 # Importa módulos

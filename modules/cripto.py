@@ -2,8 +2,6 @@ import requests
 import psycopg2
 from datetime import datetime, timezone
 
-
-
 class CriptoFetcher:
     API_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
@@ -12,9 +10,7 @@ class CriptoFetcher:
         self.total_pages = total_pages
 
     def fetch(self):
-        """Busca dados de criptos no CoinGecko."""
         all_data = []
-
         for page in range(1, self.total_pages + 1):
             url = (
                 f"{self.API_URL}"
@@ -23,7 +19,6 @@ class CriptoFetcher:
                 f"&sparkline=false"
                 f"&price_change_percentage=7d,30d,1y"
             )
-
             try:
                 r = requests.get(url, timeout=10)
                 r.raise_for_status()
@@ -32,7 +27,6 @@ class CriptoFetcher:
                 print(f"Página {page} OK ({len(data)} moedas).")
             except Exception as e:
                 print(f"❌ Erro ao buscar página {page}: {e}")
-
         return all_data
 
 
@@ -41,7 +35,6 @@ class CriptoSaver:
         self.conn = conn
 
     def save(self, cripto_list):
-        """Insere lista de criptos no banco."""
         cursor = self.conn.cursor()
         tempo_utc = datetime.now(timezone.utc)
 
@@ -87,10 +80,8 @@ class CriptoProcessor:
     def run(self):
         print("\n🚀 Coletando dados de CRIPTO...")
         dados = self.fetcher.fetch()
-
         if not dados:
             print("❌ Nenhum dado encontrado para cripto.")
             return
-
         self.saver.save(dados)
         print("✔ Finalizado módulo CRIPTO.")

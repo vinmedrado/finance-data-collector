@@ -1,20 +1,21 @@
 # modules/fiis.py
 import os
 import yfinance as yf
-import psycopg2
+from sqlalchemy import create_engine, text
 from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
-DB_URL = os.environ.get("DATABASE_URL")  # pega a URL do banco do .env
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
+TICKERS_TABLE = "tickers_fiis"
 
 class FIIProcessor:
-    def __init__(self):
-        # Conecta ao banco ao criar a instância
-        self.conn = psycopg2.connect(DB_URL)
+    def __init__(self, engine):
+        self.engine = engine
 
     def get_fii_data(self, ticker):
-        ticker_yf = ticker + ".SA"
+        ticker_yf = ticker if ticker.upper().endswith(".SA") else ticker + ".SA"
         try:
             t = yf.Ticker(ticker_yf)
             info = t.info
@@ -36,8 +37,9 @@ class FIIProcessor:
             return None
 
     def run(self):
-        with self.conn.cursor() as cur:
-            cur.execute("""
+        with self.engine.begin() as conn:
+            # Criar tabela se não existir
+            conn.exec_driver_sql("""
                 CREATE TABLE IF NOT EXISTS historico_fiis (
                     id SERIAL PRIMARY KEY,
                     data_registro DATE,
@@ -56,10 +58,9 @@ class FIIProcessor:
                     UNIQUE(ticker, data_registro)
                 )
             """)
-            self.conn.commit()
 
-            cur.execute("SELECT ticker FROM tickers_fiis")
-            tickers = [r[0] for r in cur.fetchall()]
+            # Buscar tickers
+            tickers = [r[0] for r in conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}")).fetchall()]
 
             for i, ticker in enumerate(tickers, start=1):
                 print(f"[{i}/{len(tickers)}] Buscando {ticker}...")
@@ -67,36 +68,30 @@ class FIIProcessor:
                 if not data:
                     continue
 
-                cur.execute("""
-                    SELECT 1 FROM historico_fiis WHERE ticker=%s AND data_registro=%s
-                """, (ticker.upper(), datetime.today().date()))
-                if cur.fetchone():
-                    print(f"⚠️ {ticker} já registrado hoje, pulando...")
-                    continue
+                # Inserir ou atualizar registro
+                insert_sql = text("""
+                    INSERT INTO historico_fiis (
+                        data_registro, ticker, valor, dividend_yield, ultimo_rendimento,
+                        p_vp, p_l, beta, patrimonio, liquidez_diaria, valor_em_caixa, setor, rentabilidade_12m
+                    )
+                    VALUES (
+                        :data_registro, :ticker, :valor, :dividend_yield, :ultimo_rendimento,
+                        :p_vp, :p_l, :beta, :patrimonio, :liquidez_diaria, :valor_em_caixa, :setor, :rentabilidade_12m
+                    )
+                    ON CONFLICT (ticker, data_registro) DO UPDATE SET
+                        valor = EXCLUDED.valor,
+                        dividend_yield = EXCLUDED.dividend_yield,
+                        ultimo_rendimento = EXCLUDED.ultimo_rendimento,
+                        p_vp = EXCLUDED.p_vp,
+                        p_l = EXCLUDED.p_l,
+                        beta = EXCLUDED.beta,
+                        patrimonio = EXCLUDED.patrimonio,
+                        liquidez_diaria = EXCLUDED.liquidez_diaria,
+                        valor_em_caixa = EXCLUDED.valor_em_caixa,
+                        setor = EXCLUDED.setor,
+                        rentabilidade_12m = EXCLUDED.rentabilidade_12m
+                """)
 
-                try:
-                    cur.execute("""
-                        INSERT INTO historico_fiis
-                        (data_registro, ticker, valor, dividend_yield, ultimo_rendimento, p_vp, p_l,
-                         beta, patrimonio, liquidez_diaria, valor_em_caixa, setor, rentabilidade_12m)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    """, (
-                        datetime.today(),
-                        ticker.upper(),
-                        data["valor"],
-                        data["dividend_yield"],
-                        data["ultimo_rendimento"],
-                        data["p_vp"],
-                        data["p_l"],
-                        data["beta"],
-                        data["patrimonio"],
-                        data["liquidez_diaria"],
-                        data["valor_em_caixa"],
-                        data["setor"],
-                        data["rentabilidade_12m"]
-                    ))
-                    self.conn.commit()
-                    print(f"✅ {ticker} inserido com sucesso.")
-                except Exception as e:
-                    print(f"❌ Erro ao inserir {ticker}: {e}")
-                    self.conn.rollback()
+                params = {"data_registro": datetime.today().date(), "ticker": ticker.upper(), **data}
+                conn.execute(insert_sql, params)
+                print(f"✅ {ticker} inserido/atualizado com sucesso.")
