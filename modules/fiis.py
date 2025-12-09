@@ -37,9 +37,9 @@ class FIIProcessor:
             return None
 
     def run(self):
-        with self.engine.begin() as conn:
+     with self.engine.begin() as conn:
         # Criar tabela se não existir
-         conn.exec_driver_sql("""
+        conn.exec_driver_sql("""
             CREATE TABLE IF NOT EXISTS historico_fiis (
                 id SERIAL PRIMARY KEY,
                 data_registro DATE,
@@ -60,29 +60,35 @@ class FIIProcessor:
         """)
 
         # Buscar tickers
-        tickers = [r[0] for r in conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}")).fetchall()]
+        result = conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}")).fetchall()
+        tickers = [r[0].strip() for r in result if r[0]]  # Remove espaços e ignora nulos
+        print(f"TICKERS encontrados: {tickers}")
+
+        if not tickers:
+            print("⚠️ Nenhum ticker encontrado na tabela, verifique TICKERS_FIIS.")
+            return
 
         for i, ticker in enumerate(tickers, start=1):
-            if not ticker:
-                print(f"⚠️ Ticker vazio na posição {i}, pulando...")
-                continue
-
             print(f"[{i}/{len(tickers)}] Buscando {ticker}...")
             data = self.get_fii_data(ticker)
-            if not data:
+
+            if data is None:
+                print(f"⚠️ Nenhum dado retornado para {ticker}, pulando...")
                 continue
 
-            # Lista de todos os campos que a query espera
+            print(f"DEBUG dados de {ticker}: {data}")
+
+            # Lista de campos esperados
             fields = [
                 "valor", "dividend_yield", "ultimo_rendimento",
                 "p_vp", "p_l", "beta", "patrimonio", "liquidez_diaria",
                 "valor_em_caixa", "setor", "rentabilidade_12m"
             ]
 
-            # Garantir que todos os campos existam, mesmo que None
             safe_data = {field: data.get(field) for field in fields}
 
             params = {"data_registro": datetime.today().date(), "ticker": ticker.upper(), **safe_data}
+            print(f"DEBUG params SQL: {params}")
 
             insert_sql = text("""
                 INSERT INTO historico_fiis (
@@ -107,5 +113,8 @@ class FIIProcessor:
                     rentabilidade_12m = EXCLUDED.rentabilidade_12m
             """)
 
-            conn.execute(insert_sql, params)
-            print(f"✅ {ticker} inserido/atualizado com sucesso.")
+            try:
+                conn.execute(insert_sql, params)
+                print(f"✅ {ticker} inserido/atualizado com sucesso.")
+            except Exception as e:
+                print(f"❌ Erro ao inserir {ticker}: {e}")
