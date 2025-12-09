@@ -23,7 +23,7 @@ engine = create_engine(DATABASE_URL)
 
 # Importa módulos
 from modules.fiis import FIIProcessor
-from modules.etf import ETFProcessor, ETFDataFetcher, ETFDatabaseSaver
+from modules.etf import ETFProcessor
 from modules.acoes import AcoesProcessor
 from modules.bdr import BDRProcessor
 from modules.cripto import CriptoProcessor
