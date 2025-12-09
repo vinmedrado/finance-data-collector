@@ -1,0 +1,29 @@
+name: Finance Data Collector - Diário
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 18h no Brasil (21h UTC)
+  workflow_dispatch:
+
+jobs:
+  run-collector:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run main
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRAPI_TOKEN: ${{ secrets.BRAPI_TOKEN }}
+        run: |
+          python main.py
