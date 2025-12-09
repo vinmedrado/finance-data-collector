@@ -20,34 +20,32 @@ class AcoesProcessor:
         ticker_yf = ticker if ticker.upper().endswith(".SA") else ticker + ".SA"
         t = yf.Ticker(ticker_yf)
 
-        # Histórico diário
         hist = t.history(period="1d")
         if hist.empty:
             return None
 
         row = hist.iloc[-1]
-        info = t.info
+        info = t.info or {}
 
         data = {
             "ticker": ticker.upper(),
             "data": row.name.date(),
-            "preco_abertura": float(row.get("Open") or 0),
-            "preco_fechamento": float(row.get("Close") or 0),
-            "preco_maximo": float(row.get("High") or 0),
-            "preco_minimo": float(row.get("Low") or 0),
-            "volume": float(row.get("Volume") or 0),
-            "pl": float(info.get("trailingPE") or 0),
-            "pvp": float(info.get("priceToBook") or 0),
-            "beta": float(info.get("beta") or 0),
-            "dividend_yield": float(info.get("dividendYield") or 0),
-            "last_dividend": float(info.get("lastDividendValue") or 0),
+            "preco_abertura": row.get("Open"),
+            "preco_fechamento": row.get("Close"),
+            "preco_maximo": row.get("High"),
+            "preco_minimo": row.get("Low"),
+            "volume": row.get("Volume"),
+            "pl": info.get("trailingPE"),
+            "pvp": info.get("priceToBook"),
+            "beta": info.get("beta"),
+            "dividend_yield": info.get("dividendYield"),
+            "last_dividend": info.get("lastDividendValue"),
             "dividend_date": datetime.fromtimestamp(info.get("lastDividendDate")).date() if info.get("lastDividendDate") else None
         }
         return data
 
     def run(self):
         with self.engine.begin() as conn:
-            # Criar tabela se não existir
             conn.exec_driver_sql("""
             CREATE TABLE IF NOT EXISTS historico_acoes (
                 id SERIAL PRIMARY KEY,
@@ -68,7 +66,6 @@ class AcoesProcessor:
             )
             """)
 
-            # Ler tickers
             tickers = [r[0] for r in conn.execute(text(f"SELECT ticker FROM {TICKERS_TABLE}")).fetchall()]
 
             insert_sql = text("""
@@ -94,15 +91,31 @@ class AcoesProcessor:
                 dividend_date = EXCLUDED.dividend_date
             """)
 
-            # Loop de processamento
             for i, ticker in enumerate(tickers, start=1):
-                print(f"[{i}/{len(tickers)}] Processando {ticker}...")
-                data = self.fetch_data(ticker)
-                if not data:
-                    print(f"⚠️ Nenhum dado para {ticker}")
+                if not ticker:
+                    print(f"⚠️ Ticker vazio na posição {i}, pulando...")
                     continue
-                conn.execute(insert_sql, data)
-                print(f"✅ {ticker} atualizado com sucesso.")
+
+                print(f"[{i}/{len(tickers)}] Processando {ticker}...")
+                try:
+                    data = self.fetch_data(ticker)
+                    if not data:
+                        print(f"⚠️ Nenhum dado para {ticker}")
+                        continue
+
+                    # Garantir campos existentes mesmo que None
+                    safe_data = {k: data.get(k) for k in [
+                        "ticker", "data", "preco_abertura", "preco_fechamento", "preco_maximo", "preco_minimo",
+                        "volume", "pl", "pvp", "beta", "dividend_yield", "last_dividend", "dividend_date"
+                    ]}
+
+                    with self.engine.begin() as conn:
+                        conn.execute(insert_sql, safe_data)
+
+                    print(f"✅ {ticker} atualizado com sucesso.")
+                except Exception as e:
+                    print(f"❌ Erro {ticker}: {e}")
+
                 time.sleep(SLEEP_BETWEEN)
 
         print("=== Processamento de ações finalizado ===")

@@ -34,7 +34,7 @@ class BDRProcessor:
             r = requests.get(url, params={"token": BRAPI_TOKEN}, timeout=10).json()
             results = r.get("results")
             if not results:
-                return None
+                return {}
             data = results[0]
             return {
                 "preco_atual": data.get("regularMarketPrice"),
@@ -44,7 +44,7 @@ class BDRProcessor:
                 "p_l": data.get("priceEarnings"),
             }
         except Exception:
-            return None
+            return {}
 
     def fetch_yahoo(self, ticker):
         try:
@@ -75,12 +75,20 @@ class BDRProcessor:
                 "nome_empresa": info.get("longName"),
             }
         except Exception:
-            return None
+            return {}
 
     def merge_data(self, brapi_data, yahoo_data):
         return {**(brapi_data or {}), **(yahoo_data or {})}
 
     def run(self):
+        fields = [
+            "ticker", "preco_atual", "preco_52_semana_alta", "preco_52_semana_baixa",
+            "preco_media_50d", "preco_media_200d", "p_l", "p_vp", "p_s", "market_cap",
+            "enterprise_value", "roe", "roa", "margem_lucro", "margem_operacional",
+            "dividend_yield", "payout_ratio", "crescimento_receita", "crescimento_lucro",
+            "beta", "setor", "industria", "nome_empresa"
+        ]
+
         # Criar tabela se não existir
         with self.engine.begin() as conn:
             conn.exec_driver_sql("""
@@ -158,18 +166,23 @@ class BDRProcessor:
 
         # Loop de processamento
         for i, ticker in enumerate(tickers, start=1):
+            if not ticker:
+                print(f"⚠️ Ticker vazio na posição {i}, pulando...")
+                continue
+
             print(f"[{i}/{len(tickers)}] Processando {ticker}...")
             try:
                 brapi_data = self.fetch_brapi(ticker)
                 yahoo_data = self.fetch_yahoo(ticker)
-                if not brapi_data and not yahoo_data:
-                    print(f"⚠️ Nenhum dado para {ticker}")
-                    continue
 
                 merged = self.merge_data(brapi_data, yahoo_data)
 
+                # Garantir que todos os campos existam para o SQL
+                safe_data = {field: merged.get(field) for field in fields}
+                safe_data["ticker"] = ticker  # garantir ticker preenchido
+
                 with self.engine.begin() as conn:
-                    conn.execute(insert_sql, merged)
+                    conn.execute(insert_sql, safe_data)
 
                 print(f"✅ {ticker} atualizado com sucesso.")
             except Exception as e:

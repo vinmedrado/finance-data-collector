@@ -76,7 +76,7 @@ except Exception as e:
 # ETFs
 # ----------------------------
 try:
-    etf_proc = ETFProcessor()
+    etf_proc = ETFProcessor(engine)
     etf_proc.run()
 except Exception as e:
     print(f"❌ ERRO durante o processamento de ETF: {e}")
