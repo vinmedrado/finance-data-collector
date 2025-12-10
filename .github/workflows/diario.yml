@@ -2,7 +2,7 @@ name: Finance Data Collector - Diário
 
 on:
   schedule:
-    - cron: '0 21 * * *'  # 18h no Brasil (21h UTC)
+    - cron: '10 21 * * *'  # 18h no Brasil (21h UTC)
   workflow_dispatch:
 
 jobs:
