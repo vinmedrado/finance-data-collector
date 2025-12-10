@@ -43,20 +43,21 @@ class AcoesProcessor:
         else:
             dividend_date = None
 
-        return {
-            "ticker": ticker.upper(),
-            "data": row.name.date(),
-            "preco_abertura": row.get("Open"),
-            "preco_fechamento": row.get("Close"),
-            "preco_maximo": row.get("High"),
-            "preco_minimo": row.get("Low"),
-            "volume": row.get("Volume"),
-            "pl": info.get("trailingPE"),
-            "pvp": info.get("priceToBook"),
-            "beta": info.get("beta"),
-            "dividend_yield": info.get("dividendYield"),
-            "last_dividend": info.get("lastDividendValue"),
-            "dividend_date": dividend_date,
+
+        return { 
+                "ticker": ticker.upper(),
+                "data": row.name.date(),
+                "preco_abertura": float(row.get("Open")) if row.get("Open") is not None else None,
+                "preco_fechamento": float(row.get("Close")) if row.get("Close") is not None else None,
+                "preco_maximo": float(row.get("High")) if row.get("High") is not None else None,
+                "preco_minimo": float(row.get("Low")) if row.get("Low") is not None else None,
+                "volume": float(row.get("Volume")) if row.get("Volume") is not None else None,
+                "pl": float(info.get("trailingPE")) if info.get("trailingPE") is not None else None,
+                "pvp": float(info.get("priceToBook")) if info.get("priceToBook") is not None else None,
+                "beta": float(info.get("beta")) if info.get("beta") is not None else None,
+                "dividend_yield": float(info.get("dividendYield")) if info.get("dividendYield") is not None else None,
+                "last_dividend": float(info.get("lastDividendValue")) if info.get("lastDividendValue") is not None else None,
+                "dividend_date": dividend_date,
         }
 
     def run(self):
